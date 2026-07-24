@@ -1,5 +1,9 @@
 fileFormatVersion: 2
+<<<<<<<< HEAD:Assets/MapRoom.meta
 guid: a07239425bde90e4eb03ad7cc41c59a4
+========
+guid: 92d2ced07b0b3b9428b9ff5023d402a9
+>>>>>>>> origin/gameplay:Assets/Mini First Person Controller.meta
 folderAsset: yes
 DefaultImporter:
   externalObjects: {}
