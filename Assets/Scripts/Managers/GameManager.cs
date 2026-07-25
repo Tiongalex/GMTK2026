@@ -1,4 +1,5 @@
-using System;
+using System; 
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -32,7 +33,7 @@ public class GameManager : MonoBehaviour
     [Header("Ticking Sound Configuration")]
     [SerializeField] private float minPitch = 1.0f; // Normal speed at start (0% time elapsed)
     [SerializeField] private float maxPitch = 1.0f;
-    [SerializeField] private float maxVolume = 1.0f; // Peak volume at 100% time elapsed
+    [SerializeField] private float maxVolume = 2.0f; // Peak volume at 100% time elapsed
 
     [Header("Lighting Settings")]
     [SerializeField] private List<Light> roomLights = new List<Light>();
@@ -47,6 +48,24 @@ public class GameManager : MonoBehaviour
 
     private Dictionary<Light, float> originalIntensities = new Dictionary<Light, float>();
 
+    [Header("Heartbeat Settings")]
+    [SerializeField] private AudioSource heartbeatAudioSource;
+    [SerializeField] private float heartbeatTriggerTime = 30f; // Seconds remaining to trigger
+
+    private bool heartbeatStarted = false;
+    private bool deathSequenceTriggered = false; // Flag to prevent multi-triggering coroutine
+
+    [Header("Zero-Second Sequence Audio")]
+    [SerializeField] private AudioSource doorOpenAudioSource;
+    [SerializeField] private AudioSource jumpscareAudioSource;
+
+    [Header("UI Death Fade")]
+    [SerializeField] private CanvasGroup fadeScreenCanvasGroup; // CanvasGroup on a full-screen black UI Image
+    [SerializeField] private float fadeDuration = 0.5f; // Duration of black screen fade
+
+    [Header("Player Control")]
+    [SerializeField] private MonoBehaviour playerControllerScript; // Drag FirstPersonController / Player Movement script here
+
     private void Awake()
     {
         if (Instance == null) Instance = this;
@@ -58,9 +77,7 @@ public class GameManager : MonoBehaviour
         TimeRemaining = totalTime;
         SealedObjectsCount = 0;
 
-        // FIX 1: Initialize lights on Start
         InitializeLighting();
-
         SpawnNextCursedObject();
 
         // Start Ambient Background Music
@@ -89,14 +106,62 @@ public class GameManager : MonoBehaviour
 
         // Dynamic Progression
         UpdateTickingAudio();
-
-        // FIX 2: Call lighting update on every frame
         UpdateRoomLighting();
 
-        if (TimeRemaining <= 0)
+        if (TimeRemaining <= 0 && !deathSequenceTriggered)
         {
+            deathSequenceTriggered = true;
             TimeRemaining = 0;
             TriggerLoss("Time's Up");
+            StartCoroutine(DeathSequenceCoroutine());
+        }
+
+        if (TimeRemaining <= heartbeatTriggerTime && !heartbeatStarted)
+        {
+            heartbeatStarted = true;
+            if (heartbeatAudioSource != null)
+            {
+                heartbeatAudioSource.time = 0f;
+                heartbeatAudioSource.Play();
+            }
+        }
+    }
+
+    private IEnumerator DeathSequenceCoroutine()
+    {
+        // Lock player movement & camera
+        if (playerControllerScript != null)
+        {
+            playerControllerScript.enabled = false;
+        }
+        // --- Step 1: At t = 0s ---
+        // Play the slow door opening sound
+        if (doorOpenAudioSource != null)
+        {
+            doorOpenAudioSource.Play();
+        }
+
+        // Wait exactly 2 seconds while the door sound plays/finishes
+        yield return new WaitForSeconds(2.0f);
+
+        // --- Step 2: At t = 2s ---
+        // Play the jumpscare audio
+        if (jumpscareAudioSource != null)
+        {
+            jumpscareAudioSource.Play();
+        }
+
+        // Simultaneously fade the screen to black
+        if (fadeScreenCanvasGroup != null)
+        {
+            float elapsedTime = 0f;
+            while (elapsedTime < fadeDuration)
+            {
+                elapsedTime += Time.deltaTime;
+                fadeScreenCanvasGroup.alpha = Mathf.Clamp01(elapsedTime / fadeDuration);
+                yield return null;
+            }
+            fadeScreenCanvasGroup.alpha = 1f; // Ensure solid black
         }
     }
 
@@ -108,9 +173,9 @@ public class GameManager : MonoBehaviour
         float elapsedRatio = Mathf.Clamp01((totalTime - TimeRemaining) / totalTime);
 
         // Amplitude (Volume) increases from 0 to maxVolume
-        tickingAudioSource.volume = elapsedRatio * maxVolume;
+        heartbeatAudioSource.volume = elapsedRatio * maxVolume;
 
-        // FIX 3: Targeted tickingAudioSource for pitch acceleration (80%-100% timeframe)
+        // Pitch acceleration
         float pitchProgress = Mathf.InverseLerp(0.8f, 1.0f, elapsedRatio);
         backgroundMusicSource.pitch = Mathf.Lerp(minPitch, maxPitch, pitchProgress);
     }
@@ -158,16 +223,11 @@ public class GameManager : MonoBehaviour
         float flickerModifier = 1.0f;
         if (enableFlicker)
         {
-            // Smooth noise value between 0.0 and 1.0 sampled over time
             float rawNoise = Mathf.PerlinNoise(Time.time * flickerSpeed, 0f);
-
-            // Flickering scales in severity as time elapses (0 at start -> maxFlickerSeverity at time's up)
             float currentSeverity = elapsedRatio * maxFlickerSeverity;
 
-            // Only dip intensity when noise pushes past a threshold
             if (rawNoise > (1.0f - currentSeverity))
             {
-                // Smoothly dip brightness instead of hard off/on snapping
                 flickerModifier = Mathf.Lerp(1.0f, 1.0f - currentSeverity, rawNoise);
             }
         }
@@ -262,8 +322,7 @@ public class GameManager : MonoBehaviour
     public void TriggerWin()
     {
         SetState(GameState.Won);
-        StopBackgroundMusic();
-        StopTickingAudio();
+        StopAllGameplayAudio();
         if (escapeDoor != null) escapeDoor.SetActive(false);
         Debug.Log("Escape Room Unlocked! You Win!");
     }
@@ -271,26 +330,16 @@ public class GameManager : MonoBehaviour
     public void TriggerLoss(string reason)
     {
         SetState(GameState.Lost);
-        StopBackgroundMusic();
-        StopTickingAudio();
+        StopAllGameplayAudio();
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
         Debug.Log("Game Over: " + reason);
     }
 
-    private void StopTickingAudio()
+    private void StopAllGameplayAudio()
     {
-        if (tickingAudioSource != null && tickingAudioSource.isPlaying)
-        {
-            tickingAudioSource.Stop();
-        }
-    }
-
-    private void StopBackgroundMusic()
-    {
-        if (backgroundMusicSource != null && backgroundMusicSource.isPlaying)
-        {
-            backgroundMusicSource.Stop();
-        }
+        if (tickingAudioSource != null && tickingAudioSource.isPlaying) tickingAudioSource.Stop();
+        if (backgroundMusicSource != null && backgroundMusicSource.isPlaying) backgroundMusicSource.Stop();
+        if (heartbeatAudioSource != null && heartbeatAudioSource.isPlaying) heartbeatAudioSource.Stop();
     }
 }
