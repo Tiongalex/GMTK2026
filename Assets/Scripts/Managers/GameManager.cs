@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using TMPro;
 
 public enum GameState { Playing, MiniGame, Won, Lost }
 
@@ -84,6 +85,20 @@ public class GameManager : MonoBehaviour
             if (door != null)
             {
                 escapeDoor = door.gameObject;
+            }
+        }
+
+        // Auto-assign fadeScreenCanvasGroup if not set in inspector
+        if (fadeScreenCanvasGroup == null)
+        {
+            GameObject blackObj = GameObject.Find("Black");
+            if (blackObj != null)
+            {
+                fadeScreenCanvasGroup = blackObj.GetComponent<CanvasGroup>();
+            }
+            if (fadeScreenCanvasGroup == null)
+            {
+                fadeScreenCanvasGroup = FindObjectOfType<CanvasGroup>();
             }
         }
 
@@ -176,6 +191,7 @@ public class GameManager : MonoBehaviour
         // Simultaneously fade the screen to black
         if (fadeScreenCanvasGroup != null)
         {
+            fadeScreenCanvasGroup.gameObject.SetActive(true);
             float elapsedTime = 0f;
             while (elapsedTime < fadeDuration)
             {
@@ -384,7 +400,71 @@ public class GameManager : MonoBehaviour
         SetState(GameState.Won);
         StopAllGameplayAudio();
         if (escapeDoor != null) escapeDoor.SetActive(false);
-        Debug.Log("Escape Room Unlocked! You Win!");
+        Debug.Log("[GameManager] TriggerWin called. Escape Room Unlocked! You Win!");
+        
+        if (fadeScreenCanvasGroup == null)
+        {
+            GameObject blackObj = GameObject.Find("Black");
+            if (blackObj != null)
+            {
+                fadeScreenCanvasGroup = blackObj.GetComponent<CanvasGroup>();
+            }
+            if (fadeScreenCanvasGroup == null)
+            {
+                fadeScreenCanvasGroup = FindObjectOfType<CanvasGroup>();
+            }
+        }
+
+        Debug.Log("[GameManager] fadeScreenCanvasGroup is: " + (fadeScreenCanvasGroup != null ? fadeScreenCanvasGroup.name : "NULL"));
+        StartCoroutine(WinSequenceCoroutine());
+    }
+
+    private IEnumerator WinSequenceCoroutine()
+    {
+        // Lock player movement & camera
+        if (playerControllerScript != null)
+        {
+            playerControllerScript.enabled = false;
+        }
+
+        // Enable Cursor
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        if (fadeScreenCanvasGroup != null)
+        {
+            fadeScreenCanvasGroup.gameObject.SetActive(true);
+
+            // Remove any existing WinText children just in case
+            Transform existing = fadeScreenCanvasGroup.transform.Find("WinText");
+            if (existing != null) Destroy(existing.gameObject);
+
+            // Create WinText GameObject
+            GameObject winTextObj = new GameObject("WinText", typeof(RectTransform));
+            winTextObj.transform.SetParent(fadeScreenCanvasGroup.transform, false);
+
+            TextMeshProUGUI winText = winTextObj.AddComponent<TextMeshProUGUI>();
+            winText.text = "Game Win";
+            winText.fontSize = 64;
+            winText.color = Color.white;
+            winText.alignment = TextAlignmentOptions.Center;
+
+            RectTransform rect = winTextObj.GetComponent<RectTransform>();
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.sizeDelta = Vector2.zero;
+            rect.anchoredPosition = Vector2.zero;
+
+            // Fade the screen to black
+            float elapsedTime = 0f;
+            while (elapsedTime < fadeDuration)
+            {
+                elapsedTime += Time.deltaTime;
+                fadeScreenCanvasGroup.alpha = Mathf.Clamp01(elapsedTime / fadeDuration);
+                yield return null;
+            }
+            fadeScreenCanvasGroup.alpha = 1f; // Ensure solid black
+        }
     }
 
     public void TriggerLoss(string reason)
