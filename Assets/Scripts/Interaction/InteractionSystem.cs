@@ -10,6 +10,10 @@ public class InteractionSystem : MonoBehaviour
     [Header("UI Interaction Prompt")]
     [SerializeField] private GameObject interactionTextUI; // e.g. "Press E to Exorcise"
 
+    [Header("Audio")]
+    [SerializeField] private AudioSource interactAudioSource;
+    [SerializeField] private AudioClip interactSound;
+
     private CursedObject currentTarget;
 
     private void Update()
@@ -50,6 +54,21 @@ public class InteractionSystem : MonoBehaviour
 
     private void StartTalismanDrawing()
     {
+        AudioSource source = interactAudioSource;
+        if (source == null)
+        {
+            source = GetComponent<AudioSource>();
+            if (source == null)
+            {
+                source = gameObject.AddComponent<AudioSource>();
+            }
+        }
+
+        if (source != null && interactSound != null)
+        {
+            source.PlayOneShot(interactSound);
+        }
+
         GameManager.Instance.SetState(GameState.MiniGame);
         if (TalismanMiniGame.Instance != null)
         {

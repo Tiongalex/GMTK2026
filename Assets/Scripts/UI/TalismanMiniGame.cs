@@ -30,6 +30,12 @@ public class TalismanMiniGame : MonoBehaviour
     [SerializeField] private float minMarkingsAlpha = 0.15f;
     [SerializeField] private float maxMarkingsAlpha = 1.0f;
 
+    [Header("Visual Trail Settings")]
+    [SerializeField] private bool enableTrail = true;
+    [SerializeField] private float trailSpawnInterval = 0.04f;
+    [SerializeField] private float trailLifetime = 0.35f;
+
+
     [Header("Audio")]
     [SerializeField] private AudioSource miniGameAudioSource;
     [SerializeField] private AudioClip successSound;
@@ -78,6 +84,7 @@ public class TalismanMiniGame : MonoBehaviour
         }
 
         SetRandomDirection();
+        if (enableTrail) StartCoroutine(SpawnTrailRoutine());
     }
 
     private void Update()
@@ -217,5 +224,63 @@ public class TalismanMiniGame : MonoBehaviour
 
         float penalty = targetObject != null ? targetObject.SanityFailurePenalty : 15f;
         if (GameManager.Instance) GameManager.Instance.OnSealFailure(penalty);
+    }
+
+    private IEnumerator SpawnTrailRoutine()
+    {
+        float timer = 0f;
+        while (isRunning)
+        {
+            timer += Time.deltaTime;
+            if (timer >= trailSpawnInterval)
+            {
+                timer = 0f;
+                SpawnTrailItem();
+            }
+            yield return null;
+        }
+    }
+
+    private void SpawnTrailItem()
+    {
+        if (targetPointVisual == null || movingTargetPoint == null) return;
+        
+        // Create trail item GameObject with RectTransform and Image
+        GameObject trailObj = new GameObject("TrailItem", typeof(RectTransform), typeof(Image));
+        trailObj.transform.SetParent(movingTargetPoint.parent, false);
+        trailObj.transform.SetSiblingIndex(movingTargetPoint.GetSiblingIndex()); // Put behind the moving target point
+        
+        RectTransform rt = trailObj.GetComponent<RectTransform>();
+        rt.anchoredPosition = movingTargetPoint.anchoredPosition;
+        rt.sizeDelta = movingTargetPoint.sizeDelta;
+        rt.localScale = movingTargetPoint.localScale;
+        rt.rotation = movingTargetPoint.rotation;
+        
+        Image img = trailObj.GetComponent<Image>();
+        img.sprite = targetPointVisual.sprite;
+        img.color = targetPointVisual.color;
+        img.raycastTarget = false;
+        
+        StartCoroutine(AnimateTrailItem(img, rt));
+    }
+
+    private IEnumerator AnimateTrailItem(Image img, RectTransform rt)
+    {
+        float elapsed = 0f;
+        Color startColor = img.color;
+        Vector3 startScale = rt.localScale;
+        
+        while (elapsed < trailLifetime)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / trailLifetime;
+            
+            if (img) img.color = new Color(startColor.r, startColor.g, startColor.b, Mathf.Lerp(startColor.a * 0.6f, 0f, t));
+            if (rt) rt.localScale = Vector3.Lerp(startScale, startScale * 0.2f, t);
+            
+            yield return null;
+        }
+        
+        if (img != null) Destroy(img.gameObject);
     }
 }
