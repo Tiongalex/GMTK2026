@@ -12,6 +12,7 @@ public class TalismanMiniGame : MonoBehaviour
     [SerializeField] private RectTransform movingTargetPoint; // Magic tracking point
     [SerializeField] private Image targetPointVisual;
     [SerializeField] private Image successProgressBar;
+    [SerializeField] private Image talismanMarkings; // Red calligraphy markings
 
     [Header("Gameplay Constants")]
     [SerializeField] private float successTimeRequired = 6.67f;
@@ -19,6 +20,15 @@ public class TalismanMiniGame : MonoBehaviour
     [SerializeField] private float targetSpeed = 150f;
     [SerializeField] private float targetRadius = 50f; // Range from center to track cursor
     [SerializeField] private float randomDirectionInterval = 0.5f;
+
+    [Header("Visual Juice Settings")]
+    [SerializeField] private Color trackingColor = new Color(0.1f, 0.7f, 1f, 1f); // Magic Blue
+    [SerializeField] private Color searchingColor = new Color(1f, 0.2f, 0.2f, 1f); // Warning Red
+    [SerializeField] private float pulseSpeed = 8f;
+    [SerializeField] private float pulseMinScale = 0.85f;
+    [SerializeField] private float pulseMaxScale = 1.15f;
+    [SerializeField] private float minMarkingsAlpha = 0.15f;
+    [SerializeField] private float maxMarkingsAlpha = 1.0f;
 
     [Header("Audio")]
     [SerializeField] private AudioSource miniGameAudioSource;
@@ -31,6 +41,8 @@ public class TalismanMiniGame : MonoBehaviour
     private float currentToleranceTimer;
     private Vector2 moveDirection;
     private float dirTimer;
+    private bool isTracking;
+
 
     private void Awake()
     {
@@ -46,11 +58,25 @@ public class TalismanMiniGame : MonoBehaviour
         isRunning = true;
         currentSuccessTimer = 0f;
         currentToleranceTimer = 0f;
+        isTracking = false;
         
         if (gameOverlayCanvas) gameOverlayCanvas.SetActive(true);
         
-        // Reset point position to center of Paper
-        if (movingTargetPoint) movingTargetPoint.anchoredPosition = Vector2.zero;
+        // Reset point position to center of Paper and reset scale
+        if (movingTargetPoint)
+        {
+            movingTargetPoint.anchoredPosition = Vector2.zero;
+            movingTargetPoint.localScale = Vector3.one;
+        }
+
+        // Initialize red markings visibility to minimum starting alpha
+        if (talismanMarkings)
+        {
+            Color c = talismanMarkings.color;
+            c.a = minMarkingsAlpha;
+            talismanMarkings.color = c;
+        }
+
         SetRandomDirection();
     }
 
@@ -60,6 +86,7 @@ public class TalismanMiniGame : MonoBehaviour
 
         UpdateTargetMovement();
         CheckPlayerTracking();
+        UpdateVisualJuice();
     }
 
     private void UpdateTargetMovement()
@@ -108,12 +135,12 @@ public class TalismanMiniGame : MonoBehaviour
         );
 
         float distance = Vector2.Distance(localMousePos, movingTargetPoint.anchoredPosition);
-        bool isTracking = (distance <= targetRadius);
+        isTracking = (distance <= targetRadius);
 
-        // Feedback color
+        // Feedback color using dynamic tracking and searching colors
         if (targetPointVisual)
         {
-            targetPointVisual.color = isTracking ? Color.gold : Color.red;
+            targetPointVisual.color = isTracking ? trackingColor : searchingColor;
         }
 
         if (isTracking)
@@ -142,6 +169,31 @@ public class TalismanMiniGame : MonoBehaviour
         else if (currentToleranceTimer >= toleranceTimeAllowed)
         {
             FailExorcism();
+        }
+    }
+
+    private void UpdateVisualJuice()
+    {
+        if (movingTargetPoint == null) return;
+
+        // Pulse the tracking point's scale if tracking, otherwise reset to 1
+        if (isTracking)
+        {
+            float pulse = Mathf.PingPong(Time.time * pulseSpeed, pulseMaxScale - pulseMinScale) + pulseMinScale;
+            movingTargetPoint.localScale = new Vector3(pulse, pulse, 1f);
+        }
+        else
+        {
+            movingTargetPoint.localScale = Vector3.Lerp(movingTargetPoint.localScale, Vector3.one, Time.deltaTime * 5f);
+        }
+
+        // Dynamically fade in the red markings as progress increases
+        if (talismanMarkings)
+        {
+            float progress = currentSuccessTimer / successTimeRequired;
+            Color c = talismanMarkings.color;
+            c.a = Mathf.Lerp(minMarkingsAlpha, maxMarkingsAlpha, progress);
+            talismanMarkings.color = c;
         }
     }
 
