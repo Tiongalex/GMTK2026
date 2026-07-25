@@ -282,6 +282,11 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 485970, guid: c53f42399abc6d44c8a340f4938d9dbf, type: 3}
   m_PrefabInstance: {fileID: 29051767}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &35572276 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 1202036086350856, guid: 38b5d739ceb5c2348825a8b615719754, type: 3}
+  m_PrefabInstance: {fileID: 2121536421}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &38076734
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -4445,6 +4450,28 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 6307899638335501666, guid: 54d6debc897909b4caee725b3cb3ea8f, type: 3}
   m_PrefabInstance: {fileID: 505198693}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &530495239 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 1889589370831100, guid: 38b5d739ceb5c2348825a8b615719754, type: 3}
+  m_PrefabInstance: {fileID: 2121536421}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &530495246
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 530495239}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f887e81ade8e0c944b214d3020c13114, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EscapeDoor
+  doorAudioSource: {fileID: 0}
+  unlockSound: {fileID: 8300000, guid: 21f7e0731a81db844b8db0ed524a5f0a, type: 3}
+  lockedRattleSound: {fileID: 0}
+  lockedIndicator: {fileID: 0}
+  unlockedIndicator: {fileID: 0}
 --- !u!1001 &533046947
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -24353,16 +24380,32 @@ PrefabInstance:
       value: Door_11_Brown
       objectReference: {fileID: 0}
     - target: {fileID: 1202036086350856, guid: 38b5d739ceb5c2348825a8b615719754, type: 3}
+      propertyPath: m_Layer
+      value: 6
+      objectReference: {fileID: 0}
+    - target: {fileID: 1202036086350856, guid: 38b5d739ceb5c2348825a8b615719754, type: 3}
       propertyPath: m_StaticEditorFlags
       value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 1277515215171538, guid: 38b5d739ceb5c2348825a8b615719754, type: 3}
+      propertyPath: m_Layer
+      value: 6
       objectReference: {fileID: 0}
     - target: {fileID: 1277515215171538, guid: 38b5d739ceb5c2348825a8b615719754, type: 3}
       propertyPath: m_StaticEditorFlags
       value: 2147483647
       objectReference: {fileID: 0}
     - target: {fileID: 1889589370831100, guid: 38b5d739ceb5c2348825a8b615719754, type: 3}
+      propertyPath: m_Layer
+      value: 6
+      objectReference: {fileID: 0}
+    - target: {fileID: 1889589370831100, guid: 38b5d739ceb5c2348825a8b615719754, type: 3}
       propertyPath: m_StaticEditorFlags
       value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 1908674092843544, guid: 38b5d739ceb5c2348825a8b615719754, type: 3}
+      propertyPath: m_Layer
+      value: 6
       objectReference: {fileID: 0}
     - target: {fileID: 1908674092843544, guid: 38b5d739ceb5c2348825a8b615719754, type: 3}
       propertyPath: m_StaticEditorFlags
@@ -24411,13 +24454,36 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 1202036086350856, guid: 38b5d739ceb5c2348825a8b615719754, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2121536423}
+    - targetCorrespondingSourceObject: {fileID: 1889589370831100, guid: 38b5d739ceb5c2348825a8b615719754, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 530495246}
   m_SourcePrefab: {fileID: 100100000, guid: 38b5d739ceb5c2348825a8b615719754, type: 3}
 --- !u!4 &2121536422 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4651603642805868, guid: 38b5d739ceb5c2348825a8b615719754, type: 3}
   m_PrefabInstance: {fileID: 2121536421}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &2121536423
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 35572276}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f887e81ade8e0c944b214d3020c13114, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EscapeDoor
+  doorAudioSource: {fileID: 0}
+  unlockSound: {fileID: 8300000, guid: 21f7e0731a81db844b8db0ed524a5f0a, type: 3}
+  lockedRattleSound: {fileID: 0}
+  lockedIndicator: {fileID: 0}
+  unlockedIndicator: {fileID: 0}
 --- !u!1 &2142881362 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 5242010300582068122, guid: f2e0b7ae4dae8cf44955bccd3512b213, type: 3}

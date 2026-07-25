@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using TMPro;
 
 public enum GameState { Playing, MiniGame, Won, Lost }
 
@@ -76,6 +77,42 @@ public class GameManager : MonoBehaviour
     {
         TimeRemaining = totalTime;
         SealedObjectsCount = 0;
+
+        // Auto-assign escapeDoor if not set in inspector
+        if (escapeDoor == null)
+        {
+            EscapeDoor door = FindObjectOfType<EscapeDoor>();
+            if (door != null)
+            {
+                escapeDoor = door.gameObject;
+            }
+        }
+
+        // Auto-assign fadeScreenCanvasGroup if not set in inspector
+        if (fadeScreenCanvasGroup == null)
+        {
+            GameObject blackObj = GameObject.Find("Black");
+            if (blackObj != null)
+            {
+                fadeScreenCanvasGroup = blackObj.GetComponent<CanvasGroup>();
+            }
+            if (fadeScreenCanvasGroup == null)
+            {
+                fadeScreenCanvasGroup = FindObjectOfType<CanvasGroup>();
+            }
+        }
+
+        // Auto-populate cursedObjectPool if empty in inspector
+        if (cursedObjectPool == null || cursedObjectPool.Count == 0)
+        {
+            cursedObjectPool = new List<CursedObject>(FindObjectsOfType<CursedObject>());
+        }
+
+        // Clamp requiredSealedObjects to available count
+        if (cursedObjectPool.Count > 0)
+        {
+            requiredSealedObjects = Mathf.Min(requiredSealedObjects, cursedObjectPool.Count);
+        }
 
         InitializeLighting();
         SpawnNextCursedObject();
@@ -154,6 +191,7 @@ public class GameManager : MonoBehaviour
         // Simultaneously fade the screen to black
         if (fadeScreenCanvasGroup != null)
         {
+            fadeScreenCanvasGroup.gameObject.SetActive(true);
             float elapsedTime = 0f;
             while (elapsedTime < fadeDuration)
             {
@@ -245,11 +283,34 @@ public class GameManager : MonoBehaviour
 
     #endregion
 
+    private EscapeDoor GetEscapeDoorComponent()
+    {
+        if (escapeDoor == null)
+        {
+            return FindObjectOfType<EscapeDoor>();
+        }
+        EscapeDoor door = escapeDoor.GetComponent<EscapeDoor>();
+        if (door == null) door = escapeDoor.GetComponentInChildren<EscapeDoor>();
+        if (door == null) door = escapeDoor.GetComponentInParent<EscapeDoor>();
+        if (door == null) door = FindObjectOfType<EscapeDoor>();
+        return door;
+    }
+
     public void SpawnNextCursedObject()
     {
-        if (SealedObjectsCount >= requiredSealedObjects)
+        bool allSealed = SealedObjectsCount >= requiredSealedObjects;
+        if (!allSealed && cursedObjectPool != null && cursedObjectPool.Count > 0)
         {
-            TriggerWin();
+            allSealed = cursedObjectPool.FindAll(o => !o.IsSealed).Count == 0;
+        }
+
+        if (allSealed)
+        {
+            EscapeDoor doorComponent = GetEscapeDoorComponent();
+            if (doorComponent != null)
+            {
+                doorComponent.Unlock();
+            }
             return;
         }
 
@@ -280,9 +341,24 @@ public class GameManager : MonoBehaviour
         OnObjectSealed?.Invoke(SealedObjectsCount);
         SanityManager.Instance.AddSanity(20f);
 
-        if (SealedObjectsCount >= requiredSealedObjects)
+        bool allSealed = SealedObjectsCount >= requiredSealedObjects;
+        if (!allSealed && cursedObjectPool != null && cursedObjectPool.Count > 0)
         {
-            TriggerWin();
+            allSealed = cursedObjectPool.FindAll(o => !o.IsSealed).Count == 0;
+        }
+
+        if (allSealed)
+        {
+            SetState(GameState.Playing);
+            EscapeDoor doorComponent = GetEscapeDoorComponent();
+            if (doorComponent != null)
+            {
+                doorComponent.Unlock();
+            }
+            else
+            {
+                Debug.LogWarning("[GameManager] Could not find any EscapeDoor component in the scene!");
+            }
         }
         else
         {
@@ -324,7 +400,71 @@ public class GameManager : MonoBehaviour
         SetState(GameState.Won);
         StopAllGameplayAudio();
         if (escapeDoor != null) escapeDoor.SetActive(false);
-        Debug.Log("Escape Room Unlocked! You Win!");
+        Debug.Log("[GameManager] TriggerWin called. Escape Room Unlocked! You Win!");
+        
+        if (fadeScreenCanvasGroup == null)
+        {
+            GameObject blackObj = GameObject.Find("Black");
+            if (blackObj != null)
+            {
+                fadeScreenCanvasGroup = blackObj.GetComponent<CanvasGroup>();
+            }
+            if (fadeScreenCanvasGroup == null)
+            {
+                fadeScreenCanvasGroup = FindObjectOfType<CanvasGroup>();
+            }
+        }
+
+        Debug.Log("[GameManager] fadeScreenCanvasGroup is: " + (fadeScreenCanvasGroup != null ? fadeScreenCanvasGroup.name : "NULL"));
+        StartCoroutine(WinSequenceCoroutine());
+    }
+
+    private IEnumerator WinSequenceCoroutine()
+    {
+        // Lock player movement & camera
+        if (playerControllerScript != null)
+        {
+            playerControllerScript.enabled = false;
+        }
+
+        // Enable Cursor
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        if (fadeScreenCanvasGroup != null)
+        {
+            fadeScreenCanvasGroup.gameObject.SetActive(true);
+
+            // Remove any existing WinText children just in case
+            Transform existing = fadeScreenCanvasGroup.transform.Find("WinText");
+            if (existing != null) Destroy(existing.gameObject);
+
+            // Create WinText GameObject
+            GameObject winTextObj = new GameObject("WinText", typeof(RectTransform));
+            winTextObj.transform.SetParent(fadeScreenCanvasGroup.transform, false);
+
+            TextMeshProUGUI winText = winTextObj.AddComponent<TextMeshProUGUI>();
+            winText.text = "Game Win";
+            winText.fontSize = 64;
+            winText.color = Color.white;
+            winText.alignment = TextAlignmentOptions.Center;
+
+            RectTransform rect = winTextObj.GetComponent<RectTransform>();
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.sizeDelta = Vector2.zero;
+            rect.anchoredPosition = Vector2.zero;
+
+            // Fade the screen to black
+            float elapsedTime = 0f;
+            while (elapsedTime < fadeDuration)
+            {
+                elapsedTime += Time.deltaTime;
+                fadeScreenCanvasGroup.alpha = Mathf.Clamp01(elapsedTime / fadeDuration);
+                yield return null;
+            }
+            fadeScreenCanvasGroup.alpha = 1f; // Ensure solid black
+        }
     }
 
     public void TriggerLoss(string reason)
