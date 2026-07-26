@@ -24,7 +24,7 @@ public class GameManager : MonoBehaviour
     [SerializeField] private string ghostTag = "Ghost";
 
     [Header("Scene Navigation")]
-    [SerializeField] private string mainMenuSceneName = "MainMenu";
+    [SerializeField] private string mainMenuSceneName = "MainMenuScene";
 
     [Header("Current Status")]
     public float TimeRemaining { get; private set; }
