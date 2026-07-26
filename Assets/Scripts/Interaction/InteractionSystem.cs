@@ -5,7 +5,7 @@ public class InteractionSystem : MonoBehaviour
 {
     [Header("Raycast Config")]
     [SerializeField] private Camera playerCamera;
-    [SerializeField] private float interactRange = 1f;
+    [SerializeField] private float interactRange = 1.5f;
     [SerializeField] private LayerMask interactableLayer;
 
     [Header("UI Interaction Prompt")]
