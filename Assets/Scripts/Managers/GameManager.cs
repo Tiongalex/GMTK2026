@@ -1,7 +1,9 @@
-using System; 
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 using TMPro;
 
 public enum GameState { Playing, MiniGame, Won, Lost }
@@ -15,7 +17,14 @@ public class GameManager : MonoBehaviour
     [SerializeField] private int requiredSealedObjects = 3;
     [SerializeField] private List<CursedObject> cursedObjectPool;
     [SerializeField] private Transform[] spawnPoints;
-    [SerializeField] private GameObject escapeDoor; // Unlocks on win
+    [SerializeField] private GameObject escapeDoor;
+    [SerializeField] private float spawnDelay = 3.0f; // Delay before activating the next object
+
+    [Header("Ghost Object Settings")]
+    [SerializeField] private string ghostTag = "Ghost";
+
+    [Header("Scene Navigation")]
+    [SerializeField] private string mainMenuSceneName = "MainMenu";
 
     [Header("Current Status")]
     public float TimeRemaining { get; private set; }
@@ -32,40 +41,49 @@ public class GameManager : MonoBehaviour
     [SerializeField] private AudioSource tickingAudioSource;
 
     [Header("Ticking Sound Configuration")]
-    [SerializeField] private float minPitch = 1.0f; // Normal speed at start (0% time elapsed)
+    [SerializeField] private float minPitch = 1.0f;
     [SerializeField] private float maxPitch = 1.0f;
-    [SerializeField] private float maxVolume = 2.0f; // Peak volume at 100% time elapsed
+    [SerializeField] private float maxVolume = 2.0f;
 
     [Header("Lighting Settings")]
     [SerializeField] private List<Light> roomLights = new List<Light>();
-    [SerializeField] private Color normalColor = new Color(212f / 255f, 100f / 255f, 40f / 255f, 1f); // Warm orange/amber starting color
-    [SerializeField] private Color corruptedColor = new Color(0.396f, 0f, 0f, 1f); // Deep red/orange
-    [SerializeField] private float minIntensityMultiplier = 0.4f; // Dimness near time's up
-    [SerializeField] private bool enableFlicker = true; // Enables electrical flicker past 80% time
+    [SerializeField] private Color normalColor = new Color(212f / 255f, 100f / 255f, 40f / 255f, 1f);
+    [SerializeField] private Color corruptedColor = new Color(0.396f, 0f, 0f, 1f);
+    [SerializeField] private float minIntensityMultiplier = 0.4f;
+    [SerializeField] private bool enableFlicker = true;
 
     [Header("Flicker Tuning")]
-    [SerializeField] private float flickerSpeed = 9f; // Slower speed = realistic voltage drops (was 18f)
-    [SerializeField] private float maxFlickerSeverity = 0.9f; // Max dip depth near time's up
+    [SerializeField] private float flickerSpeed = 9f;
+    [SerializeField] private float maxFlickerSeverity = 0.9f;
 
     private Dictionary<Light, float> originalIntensities = new Dictionary<Light, float>();
 
     [Header("Heartbeat Settings")]
     [SerializeField] private AudioSource heartbeatAudioSource;
-    [SerializeField] private float heartbeatTriggerTime = 30f; // Seconds remaining to trigger
+    [SerializeField] private float heartbeatTriggerTime = 30f;
 
     private bool heartbeatStarted = false;
-    private bool deathSequenceTriggered = false; // Flag to prevent multi-triggering coroutine
+    private bool deathSequenceTriggered = false;
+    private Coroutine spawnCoroutine;
 
     [Header("Zero-Second Sequence Audio")]
     [SerializeField] private AudioSource doorOpenAudioSource;
     [SerializeField] private AudioSource jumpscareAudioSource;
 
-    [Header("UI Death Fade")]
-    [SerializeField] private CanvasGroup fadeScreenCanvasGroup; // CanvasGroup on a full-screen black UI Image
-    [SerializeField] private float fadeDuration = 0.5f; // Duration of black screen fade
+    [Header("Candle Death Audio")]
+    [SerializeField] private AudioSource crazyDeathAudioSource;
 
-    [Header("Player Control")]
-    [SerializeField] private MonoBehaviour playerControllerScript; // Drag FirstPersonController / Player Movement script here
+    [Header("Custom UI References")]
+    [SerializeField] private CanvasGroup fadeScreenCanvasGroup; // The CanvasGroup on EndGamePanel
+    [SerializeField] private TextMeshProUGUI endMessageText;    // Text child inside EndGamePanel
+    [SerializeField] private Button playAgainButton;           // Play Again Button inside EndGamePanel
+    [SerializeField] private Button exitMenuButton;            // Exit To Menu Button inside EndGamePanel
+    [SerializeField] private float fadeDuration = 0.8f;
+
+    [Header("Player Control & Rigidbody Freeze")]
+    [SerializeField] private MonoBehaviour playerControllerScript; // Drag your player movement/camera script here
+    [SerializeField] private MonoBehaviour playerLookScript;       // Drag your mouse look script here (if separate)
+    [SerializeField] private Rigidbody playerRigidbody;           // Drag player's Rigidbody here to freeze physics
 
     private void Awake()
     {
@@ -78,57 +96,51 @@ public class GameManager : MonoBehaviour
         TimeRemaining = totalTime;
         SealedObjectsCount = 0;
 
-        // Auto-assign escapeDoor if not set in inspector
         if (escapeDoor == null)
         {
             EscapeDoor door = FindObjectOfType<EscapeDoor>();
-            if (door != null)
-            {
-                escapeDoor = door.gameObject;
-            }
+            if (door != null) escapeDoor = door.gameObject;
         }
 
-        // Auto-assign fadeScreenCanvasGroup if not set in inspector
-        if (fadeScreenCanvasGroup == null)
-        {
-            GameObject blackObj = GameObject.Find("Black");
-            if (blackObj != null)
-            {
-                fadeScreenCanvasGroup = blackObj.GetComponent<CanvasGroup>();
-            }
-            if (fadeScreenCanvasGroup == null)
-            {
-                fadeScreenCanvasGroup = FindObjectOfType<CanvasGroup>();
-            }
-        }
-
-        // Auto-populate cursedObjectPool if empty in inspector
         if (cursedObjectPool == null || cursedObjectPool.Count == 0)
         {
             cursedObjectPool = new List<CursedObject>(FindObjectsOfType<CursedObject>());
         }
 
-        // Clamp requiredSealedObjects to available count
+        // Make sure all objects start deactivated by default
+        foreach (CursedObject obj in cursedObjectPool)
+        {
+            if (obj != null) obj.DeactivateObject();
+        }
+
         if (cursedObjectPool.Count > 0)
         {
             requiredSealedObjects = Mathf.Min(requiredSealedObjects, cursedObjectPool.Count);
         }
 
-        InitializeLighting();
-        SpawnNextCursedObject();
+        // Hide UI on start
+        if (fadeScreenCanvasGroup != null)
+        {
+            fadeScreenCanvasGroup.alpha = 0f;
+            fadeScreenCanvasGroup.blocksRaycasts = false;
+            fadeScreenCanvasGroup.interactable = false;
+        }
 
-        // Start Ambient Background Music
+        InitializeLighting();
+
+        // Schedule the first activation after the 3-second delay
+        ScheduleNextCursedObject();
+
         if (backgroundMusicSource != null && !backgroundMusicSource.isPlaying)
         {
             backgroundMusicSource.loop = true;
             backgroundMusicSource.Play();
         }
 
-        // Start Ticking Audio Source
         if (tickingAudioSource != null)
         {
             tickingAudioSource.loop = true;
-            tickingAudioSource.volume = 0f; // Start at 0 volume
+            tickingAudioSource.volume = 0.5f;
             tickingAudioSource.pitch = minPitch;
             tickingAudioSource.Play();
         }
@@ -138,17 +150,27 @@ public class GameManager : MonoBehaviour
     {
         if (CurrentState != GameState.Playing && CurrentState != GameState.MiniGame) return;
 
-        // Count down timer
         TimeRemaining -= Time.deltaTime;
 
-        // Dynamic Progression
         UpdateTickingAudio();
         UpdateRoomLighting();
 
+        // Condition 1: Candle light reached 0% -> Insanity Death
+        if (CandleController.Instance != null && CandleController.Instance.CandlePower <= 0f && !deathSequenceTriggered)
+        {
+            deathSequenceTriggered = true;
+            DestroyAllGhostObjects();
+            TriggerLoss("Candle burned out!");
+            StartCoroutine(CrazyDeathSequenceCoroutine());
+            return;
+        }
+
+        // Condition 2: Time ran out -> Time Out Death
         if (TimeRemaining <= 0 && !deathSequenceTriggered)
         {
             deathSequenceTriggered = true;
             TimeRemaining = 0;
+            DestroyAllGhostObjects();
             TriggerLoss("Time's Up");
             StartCoroutine(DeathSequenceCoroutine());
         }
@@ -164,34 +186,103 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    private void FreezePlayer()
+    {
+        if (playerControllerScript != null) playerControllerScript.enabled = false;
+        if (playerLookScript != null) playerLookScript.enabled = false;
+
+        if (playerRigidbody != null)
+        {
+            playerRigidbody.linearVelocity = Vector3.zero;
+            playerRigidbody.angularVelocity = Vector3.zero;
+            playerRigidbody.isKinematic = true;
+        }
+    }
+
+    private void DestroyAllGhostObjects()
+    {
+        if (!string.IsNullOrEmpty(ghostTag))
+        {
+            GameObject[] ghostsByTag = GameObject.FindGameObjectsWithTag(ghostTag);
+            foreach (GameObject ghost in ghostsByTag)
+            {
+                if (ghost != null) Destroy(ghost);
+            }
+        }
+
+        GhostAI[] ghostScripts = FindObjectsOfType<GhostAI>();
+        foreach (GhostAI ghost in ghostScripts)
+        {
+            if (ghost != null) Destroy(ghost.gameObject);
+        }
+    }
+
+    private IEnumerator CrazyDeathSequenceCoroutine()
+    {
+        FreezePlayer();
+        if (crazyDeathAudioSource != null) crazyDeathAudioSource.Play();
+
+        yield return StartCoroutine(FadeAndShowEndUI("Darkness consumed your mind.\nYou fell into total insanity."));
+    }
+
     private IEnumerator DeathSequenceCoroutine()
     {
-        // Lock player movement & camera
-        if (playerControllerScript != null)
-        {
-            playerControllerScript.enabled = false;
-        }
-        // --- Step 1: At t = 0s ---
-        // Play the slow door opening sound
-        if (doorOpenAudioSource != null)
-        {
-            doorOpenAudioSource.Play();
-        }
+        FreezePlayer();
 
-        // Wait exactly 2 seconds while the door sound plays/finishes
+        if (doorOpenAudioSource != null) doorOpenAudioSource.Play();
         yield return new WaitForSeconds(2.0f);
 
-        // --- Step 2: At t = 2s ---
-        // Play the jumpscare audio
-        if (jumpscareAudioSource != null)
+        if (jumpscareAudioSource != null) jumpscareAudioSource.Play();
+
+        yield return StartCoroutine(FadeAndShowEndUI("Time ran out.\nThe entity dragged you into the shadows."));
+    }
+
+    public void TriggerWin()
+    {
+        SetState(GameState.Won);
+        StopAllGameplayAudio();
+        DestroyAllGhostObjects();
+
+        if (escapeDoor != null) escapeDoor.SetActive(false);
+
+        StartCoroutine(WinSequenceCoroutine());
+    }
+
+    private IEnumerator WinSequenceCoroutine()
+    {
+        FreezePlayer();
+
+        yield return StartCoroutine(FadeAndShowEndUI("Congratulations!\nYou broke the curse and escaped the room."));
+    }
+
+    private IEnumerator FadeAndShowEndUI(string resultMessage)
+    {
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        if (endMessageText != null)
         {
-            jumpscareAudioSource.Play();
+            endMessageText.text = resultMessage;
         }
 
-        // Simultaneously fade the screen to black
+        if (playAgainButton != null)
+        {
+            playAgainButton.onClick.RemoveAllListeners();
+            playAgainButton.onClick.AddListener(RestartGame);
+        }
+
+        if (exitMenuButton != null)
+        {
+            exitMenuButton.onClick.RemoveAllListeners();
+            exitMenuButton.onClick.AddListener(ExitToMenu);
+        }
+
         if (fadeScreenCanvasGroup != null)
         {
             fadeScreenCanvasGroup.gameObject.SetActive(true);
+            fadeScreenCanvasGroup.blocksRaycasts = true;
+            fadeScreenCanvasGroup.interactable = true;
+
             float elapsedTime = 0f;
             while (elapsedTime < fadeDuration)
             {
@@ -199,7 +290,26 @@ public class GameManager : MonoBehaviour
                 fadeScreenCanvasGroup.alpha = Mathf.Clamp01(elapsedTime / fadeDuration);
                 yield return null;
             }
-            fadeScreenCanvasGroup.alpha = 1f; // Ensure solid black
+            fadeScreenCanvasGroup.alpha = 1f;
+        }
+    }
+
+    public void RestartGame()
+    {
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+    }
+
+    public void ExitToMenu()
+    {
+        Time.timeScale = 1f;
+        if (!string.IsNullOrEmpty(mainMenuSceneName))
+        {
+            SceneManager.LoadScene(mainMenuSceneName);
+        }
+        else
+        {
+            Debug.LogWarning("[GameManager] Main menu scene name is not assigned!");
         }
     }
 
@@ -207,22 +317,24 @@ public class GameManager : MonoBehaviour
     {
         if (tickingAudioSource == null || totalTime <= 0f) return;
 
-        // Calculate progress ratio (0.0 at game start -> 1.0 when time hits zero)
         float elapsedRatio = Mathf.Clamp01((totalTime - TimeRemaining) / totalTime);
 
-        // Amplitude (Volume) increases from 0 to maxVolume
-        heartbeatAudioSource.volume = elapsedRatio * maxVolume;
+        if (heartbeatAudioSource != null)
+        {
+            heartbeatAudioSource.volume = elapsedRatio * maxVolume;
+        }
 
-        // Pitch acceleration
         float pitchProgress = Mathf.InverseLerp(0.8f, 1.0f, elapsedRatio);
-        backgroundMusicSource.pitch = Mathf.Lerp(minPitch, maxPitch, pitchProgress);
+        if (backgroundMusicSource != null)
+        {
+            backgroundMusicSource.pitch = Mathf.Lerp(minPitch, maxPitch, pitchProgress);
+        }
     }
 
     #region Lighting Logic
 
     private void InitializeLighting()
     {
-        // Auto-find tagged lights if non-assigned
         if (roomLights.Count == 0)
         {
             GameObject[] taggedObjs = GameObject.FindGameObjectsWithTag("HorrorLight");
@@ -235,7 +347,6 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // Save initial brightness of each light
         foreach (Light light in roomLights)
         {
             if (light != null)
@@ -250,14 +361,9 @@ public class GameManager : MonoBehaviour
         if (roomLights.Count == 0 || totalTime <= 0f) return;
 
         float elapsedRatio = Mathf.Clamp01((totalTime - TimeRemaining) / totalTime);
-
-        // Shift color toward corrupted color as time runs out
         Color currentColor = Color.Lerp(normalColor, corruptedColor, elapsedRatio);
-
-        // Dim lights overall
         float intensityFactor = Mathf.Lerp(1.0f, minIntensityMultiplier, elapsedRatio);
 
-        // Progressive flicker starting at t > 0
         float flickerModifier = 1.0f;
         if (enableFlicker)
         {
@@ -270,7 +376,6 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // Apply settings to scene lights
         foreach (Light light in roomLights)
         {
             if (light == null) continue;
@@ -285,10 +390,7 @@ public class GameManager : MonoBehaviour
 
     private EscapeDoor GetEscapeDoorComponent()
     {
-        if (escapeDoor == null)
-        {
-            return FindObjectOfType<EscapeDoor>();
-        }
+        if (escapeDoor == null) return FindObjectOfType<EscapeDoor>();
         EscapeDoor door = escapeDoor.GetComponent<EscapeDoor>();
         if (door == null) door = escapeDoor.GetComponentInChildren<EscapeDoor>();
         if (door == null) door = escapeDoor.GetComponentInParent<EscapeDoor>();
@@ -296,8 +398,21 @@ public class GameManager : MonoBehaviour
         return door;
     }
 
-    public void SpawnNextCursedObject()
+    public void ScheduleNextCursedObject()
     {
+        if (spawnCoroutine != null) StopCoroutine(spawnCoroutine);
+        spawnCoroutine = StartCoroutine(SpawnCursedObjectWithDelay());
+    }
+
+    private IEnumerator SpawnCursedObjectWithDelay()
+    {
+        // Ensure current active object is safely turned off
+        if (ActiveCursedObject != null)
+        {
+            ActiveCursedObject.DeactivateObject();
+            ActiveCursedObject = null;
+        }
+
         bool allSealed = SealedObjectsCount >= requiredSealedObjects;
         if (!allSealed && cursedObjectPool != null && cursedObjectPool.Count > 0)
         {
@@ -307,24 +422,19 @@ public class GameManager : MonoBehaviour
         if (allSealed)
         {
             EscapeDoor doorComponent = GetEscapeDoorComponent();
-            if (doorComponent != null)
-            {
-                doorComponent.Unlock();
-            }
-            return;
+            if (doorComponent != null) doorComponent.Unlock();
+            yield break;
         }
 
-        if (ActiveCursedObject != null)
-        {
-            ActiveCursedObject.DeactivateObject();
-        }
+        // Wait 3 seconds before choosing and activating the next cursed object
+        yield return new WaitForSeconds(spawnDelay);
 
         List<CursedObject> available = cursedObjectPool.FindAll(o => !o.IsSealed);
-        if (available.Count == 0) return;
+        if (available.Count == 0) yield break;
 
         ActiveCursedObject = available[UnityEngine.Random.Range(0, available.Count)];
 
-        if (spawnPoints.Length > 0)
+        if (spawnPoints != null && spawnPoints.Length > 0)
         {
             Transform sp = spawnPoints[UnityEngine.Random.Range(0, spawnPoints.Length)];
             ActiveCursedObject.transform.position = sp.position;
@@ -337,9 +447,13 @@ public class GameManager : MonoBehaviour
 
     public void OnSealSuccess()
     {
+        if (ActiveCursedObject != null)
+        {
+            ActiveCursedObject.SealObject();
+        }
+
         SealedObjectsCount++;
         OnObjectSealed?.Invoke(SealedObjectsCount);
-        SanityManager.Instance.AddSanity(20f);
 
         bool allSealed = SealedObjectsCount >= requiredSealedObjects;
         if (!allSealed && cursedObjectPool != null && cursedObjectPool.Count > 0)
@@ -347,29 +461,27 @@ public class GameManager : MonoBehaviour
             allSealed = cursedObjectPool.FindAll(o => !o.IsSealed).Count == 0;
         }
 
+        SetState(GameState.Playing);
+
         if (allSealed)
         {
-            SetState(GameState.Playing);
             EscapeDoor doorComponent = GetEscapeDoorComponent();
-            if (doorComponent != null)
-            {
-                doorComponent.Unlock();
-            }
-            else
-            {
-                Debug.LogWarning("[GameManager] Could not find any EscapeDoor component in the scene!");
-            }
+            if (doorComponent != null) doorComponent.Unlock();
         }
         else
         {
-            SetState(GameState.Playing);
-            SpawnNextCursedObject();
+            // Triggers 3-second delay before activating the next object
+            ScheduleNextCursedObject();
         }
     }
 
-    public void OnSealFailure(float sanityPenalty)
+    public void OnSealFailure(float penaltyAmount)
     {
-        SanityManager.Instance.SubtractSanity(sanityPenalty);
+        if (CandleController.Instance != null)
+        {
+            CandleController.Instance.ReduceCandlePower(30f);
+        }
+
         SetState(GameState.Playing);
 
         if (ActiveCursedObject != null)
@@ -392,78 +504,6 @@ public class GameManager : MonoBehaviour
         {
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
-        }
-    }
-
-    public void TriggerWin()
-    {
-        SetState(GameState.Won);
-        StopAllGameplayAudio();
-        if (escapeDoor != null) escapeDoor.SetActive(false);
-        Debug.Log("[GameManager] TriggerWin called. Escape Room Unlocked! You Win!");
-        
-        if (fadeScreenCanvasGroup == null)
-        {
-            GameObject blackObj = GameObject.Find("Black");
-            if (blackObj != null)
-            {
-                fadeScreenCanvasGroup = blackObj.GetComponent<CanvasGroup>();
-            }
-            if (fadeScreenCanvasGroup == null)
-            {
-                fadeScreenCanvasGroup = FindObjectOfType<CanvasGroup>();
-            }
-        }
-
-        Debug.Log("[GameManager] fadeScreenCanvasGroup is: " + (fadeScreenCanvasGroup != null ? fadeScreenCanvasGroup.name : "NULL"));
-        StartCoroutine(WinSequenceCoroutine());
-    }
-
-    private IEnumerator WinSequenceCoroutine()
-    {
-        // Lock player movement & camera
-        if (playerControllerScript != null)
-        {
-            playerControllerScript.enabled = false;
-        }
-
-        // Enable Cursor
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
-
-        if (fadeScreenCanvasGroup != null)
-        {
-            fadeScreenCanvasGroup.gameObject.SetActive(true);
-
-            // Remove any existing WinText children just in case
-            Transform existing = fadeScreenCanvasGroup.transform.Find("WinText");
-            if (existing != null) Destroy(existing.gameObject);
-
-            // Create WinText GameObject
-            GameObject winTextObj = new GameObject("WinText", typeof(RectTransform));
-            winTextObj.transform.SetParent(fadeScreenCanvasGroup.transform, false);
-
-            TextMeshProUGUI winText = winTextObj.AddComponent<TextMeshProUGUI>();
-            winText.text = "Game Win";
-            winText.fontSize = 64;
-            winText.color = Color.white;
-            winText.alignment = TextAlignmentOptions.Center;
-
-            RectTransform rect = winTextObj.GetComponent<RectTransform>();
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.sizeDelta = Vector2.zero;
-            rect.anchoredPosition = Vector2.zero;
-
-            // Fade the screen to black
-            float elapsedTime = 0f;
-            while (elapsedTime < fadeDuration)
-            {
-                elapsedTime += Time.deltaTime;
-                fadeScreenCanvasGroup.alpha = Mathf.Clamp01(elapsedTime / fadeDuration);
-                yield return null;
-            }
-            fadeScreenCanvasGroup.alpha = 1f; // Ensure solid black
         }
     }
 

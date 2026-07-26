@@ -5,7 +5,7 @@ public class InteractionSystem : MonoBehaviour
 {
     [Header("Raycast Config")]
     [SerializeField] private Camera playerCamera;
-    [SerializeField] private float interactRange = 3f;
+    [SerializeField] private float interactRange = 1f;
     [SerializeField] private LayerMask interactableLayer;
 
     [Header("UI Interaction Prompt")]
@@ -18,6 +18,9 @@ public class InteractionSystem : MonoBehaviour
     private CursedObject currentTarget;
     private TMP_Text promptTextComponent;
     private string defaultPromptText = "Press E to Exorcise";
+
+    // Prevents re-triggering until the key is fully released and pressed again
+    private bool waitingForKeyRelease = false;
 
     private void Start()
     {
@@ -34,10 +37,27 @@ public class InteractionSystem : MonoBehaviour
     private void Update()
     {
         if (GameManager.Instance == null) return;
+
+        // If not playing, hide UI and flag that we need a fresh key press when returning to Playing state
         if (GameManager.Instance.CurrentState != GameState.Playing)
         {
             if (interactionTextUI) interactionTextUI.SetActive(false);
+            waitingForKeyRelease = true;
             return;
+        }
+
+        // If player just exited minigame by pressing E, wait until they RELEASE 'E' before allowing new interactions
+        if (waitingForKeyRelease)
+        {
+            if (Input.GetKeyUp(KeyCode.E) || !Input.GetKey(KeyCode.E))
+            {
+                waitingForKeyRelease = false;
+            }
+            else
+            {
+                // Still holding 'E' from exiting minigame, skip input processing
+                return;
+            }
         }
 
         Ray ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
@@ -49,7 +69,7 @@ public class InteractionSystem : MonoBehaviour
         if (Physics.Raycast(ray, out hit, interactRange, interactableLayer))
         {
             Debug.DrawRay(ray.origin, ray.direction * hit.distance, Color.green);
-            
+
             // Check for CursedObject
             CursedObject cursed = hit.collider.GetComponent<CursedObject>();
             if (cursed == null)
@@ -90,7 +110,7 @@ public class InteractionSystem : MonoBehaviour
                 {
                     if (promptTextComponent != null)
                     {
-                        promptTextComponent.text = door.IsUnlocked ? "Press E to Escape" : "The door is locking";
+                        promptTextComponent.text = door.IsUnlocked ? "Press E to Escape" : "The door is locked";
                     }
                     interactionTextUI.SetActive(true);
                 }
@@ -123,6 +143,8 @@ public class InteractionSystem : MonoBehaviour
         {
             source.PlayOneShot(interactSound);
         }
+
+        if (interactionTextUI) interactionTextUI.SetActive(false);
 
         GameManager.Instance.SetState(GameState.MiniGame);
         if (TalismanMiniGame.Instance != null)

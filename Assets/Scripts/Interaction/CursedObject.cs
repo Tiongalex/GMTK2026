@@ -27,9 +27,11 @@ public class CursedObject : MonoBehaviour
     private void Start()
     {
         if (objectRenderer) originalMaterial = objectRenderer.sharedMaterial;
+
+        // Force set state on start without triggering redundant material instantiations
         if (isActive)
         {
-            ActivateObject();
+            ActivateObject(true);
         }
         else
         {
@@ -37,20 +39,24 @@ public class CursedObject : MonoBehaviour
         }
     }
 
-    public void ActivateObject()
+    public void ActivateObject(bool force = false)
     {
+        // Prevents flickering if ActivateObject() is called while already active!
+        if (isActive && !force) return;
+
         isActive = true;
         isSealed = false;
 
-        if (curseParticles) curseParticles.SetActive(true);
-        if (objectRenderer && activeMaterial) objectRenderer.material = activeMaterial;
+        if (curseParticles && !curseParticles.activeSelf)
+            curseParticles.SetActive(true);
+
+        if (objectRenderer && activeMaterial)
+            objectRenderer.sharedMaterial = activeMaterial;
 
         if (curseAudioSource && activeScarySound)
         {
-            curseAudioSource.clip = activeScarySound;
-            curseAudioSource.loop = true;
-            curseAudioSource.volume = 1f;
-            curseAudioSource.Play();
+            curseAudioSource.loop = false; // Ensures it plays only once
+            curseAudioSource.PlayOneShot(activeScarySound); // Plays cleanly without interrupting existing audio
         }
     }
 
@@ -59,6 +65,7 @@ public class CursedObject : MonoBehaviour
         isActive = false;
         if (curseParticles) curseParticles.SetActive(false);
         if (curseAudioSource) curseAudioSource.Stop();
+        if (objectRenderer && originalMaterial) objectRenderer.sharedMaterial = originalMaterial;
     }
 
     public void SealObject()
@@ -66,8 +73,8 @@ public class CursedObject : MonoBehaviour
         isSealed = true;
         isActive = false;
         if (curseParticles) curseParticles.SetActive(false);
-        if (objectRenderer && sealedMaterial) objectRenderer.material = sealedMaterial;
-        
+        if (objectRenderer && sealedMaterial) objectRenderer.sharedMaterial = sealedMaterial;
+
         if (curseAudioSource)
         {
             curseAudioSource.Stop();

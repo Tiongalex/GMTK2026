@@ -17,10 +17,14 @@ public class EscapeDoor : MonoBehaviour
 
     private void Start()
     {
-        // Auto-assign AudioSource if not set
+        // Auto-assign AudioSource if not set or missing
         if (doorAudioSource == null)
         {
             doorAudioSource = GetComponent<AudioSource>();
+            if (doorAudioSource == null)
+            {
+                doorAudioSource = GetComponentInChildren<AudioSource>();
+            }
             if (doorAudioSource == null)
             {
                 doorAudioSource = gameObject.AddComponent<AudioSource>();
@@ -59,7 +63,12 @@ public class EscapeDoor : MonoBehaviour
             Debug.Log("[EscapeDoor] Player interacted with locked escape door.");
             if (doorAudioSource != null && lockedRattleSound != null)
             {
-                doorAudioSource.PlayOneShot(lockedRattleSound);
+                // Only play if the audio source is NOT currently playing
+                if (!doorAudioSource.isPlaying)
+                {
+                    doorAudioSource.PlayOneShot(lockedRattleSound);
+                    Debug.Log("Played");
+                }
             }
         }
     }

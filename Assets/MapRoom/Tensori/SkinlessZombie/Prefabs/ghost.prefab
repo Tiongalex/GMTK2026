@@ -1609,7 +1609,7 @@ GameObject:
   - component: {fileID: 1833023687377580635}
   m_Layer: 0
   m_Name: ghost
-  m_TagString: Untagged
+  m_TagString: Ghost
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 123
@@ -1904,6 +1904,7 @@ MonoBehaviour:
   whisperClips:
   - {fileID: 8300000, guid: 42062740421bcb849822fc1e28db0791, type: 3}
   - {fileID: 8300000, guid: ae415b5d3fe26da40b7332a2d564bd79, type: 3}
+  - {fileID: 8300000, guid: 0c959617b2be1c141bca457640dd114f, type: 3}
   whisperDistanceThreshold: 3
   whisperVolume: 1
   playerTag: Player

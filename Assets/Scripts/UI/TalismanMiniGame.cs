@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
+using System.Collections.Generic;
 
 public class TalismanMiniGame : MonoBehaviour
 {
@@ -35,12 +36,14 @@ public class TalismanMiniGame : MonoBehaviour
     [SerializeField] private float trailSpawnInterval = 0.04f;
     [SerializeField] private float trailLifetime = 0.35f;
 
-
     [Header("Audio")]
-    [SerializeField] private AudioSource miniGameAudioSource;
+    [SerializeField] private AudioSource miniGameAudioSource; // For one-shot SFX (success, fail, take)
+    [SerializeField] private AudioClip drawTalismanLoopSound; // Continuous sound while tracking
     [SerializeField] private AudioClip successSound;
     [SerializeField] private AudioClip failureSound;
+    [SerializeField] private AudioClip takeTalismanSound;
 
+    private AudioSource dynamicLoopAudioSource; // Dedicated for continuous drawing loop SFX
     private CursedObject targetObject;
     private bool isRunning;
     private float currentSuccessTimer;
@@ -48,14 +51,23 @@ public class TalismanMiniGame : MonoBehaviour
     private Vector2 moveDirection;
     private float dirTimer;
     private bool isTracking;
+    private float minigameStartTime;
+
+    // Track active trail objects so they can be purged instantly
+    private List<GameObject> activeTrailItems = new List<GameObject>();
 
 
     private void Awake()
     {
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
-        
+
         if (gameOverlayCanvas) gameOverlayCanvas.SetActive(false);
+
+        // Setup a dedicated looping AudioSource so one-shots don't cut off drawing sound
+        dynamicLoopAudioSource = gameObject.AddComponent<AudioSource>();
+        dynamicLoopAudioSource.loop = true;
+        dynamicLoopAudioSource.playOnAwake = false;
     }
 
     public void StartMiniGame(CursedObject obj)
@@ -65,9 +77,12 @@ public class TalismanMiniGame : MonoBehaviour
         currentSuccessTimer = 0f;
         currentToleranceTimer = 0f;
         isTracking = false;
-        
+        minigameStartTime = Time.time;
+
+        ClearAllTrails(); // Ensure no left-over trails from previous runs
+
         if (gameOverlayCanvas) gameOverlayCanvas.SetActive(true);
-        
+
         // Reset point position to center of Paper and reset scale
         if (movingTargetPoint)
         {
@@ -83,6 +98,12 @@ public class TalismanMiniGame : MonoBehaviour
             talismanMarkings.color = c;
         }
 
+        // Prepare continuous loop clip
+        if (dynamicLoopAudioSource != null && drawTalismanLoopSound != null)
+        {
+            dynamicLoopAudioSource.clip = drawTalismanLoopSound;
+        }
+
         SetRandomDirection();
         if (enableTrail) StartCoroutine(SpawnTrailRoutine());
     }
@@ -91,9 +112,46 @@ public class TalismanMiniGame : MonoBehaviour
     {
         if (!isRunning) return;
 
+        // Exit check
+        if (Input.GetKeyDown(KeyCode.E) && Time.time > minigameStartTime + 0.1f)
+        {
+            ExitMiniGame();
+            return;
+        }
+
         UpdateTargetMovement();
         CheckPlayerTracking();
         UpdateVisualJuice();
+    }
+
+    public void ExitMiniGame()
+    {
+        isRunning = false;
+        currentSuccessTimer = 0f;
+        currentToleranceTimer = 0f;
+
+        StopAllCoroutines();
+        StopDrawingSound(); // Immediately silence tracking loop
+        ClearAllTrails(); // Immediately destroy all trail items from screen
+
+        // Hide overlay canvas
+        if (gameOverlayCanvas) gameOverlayCanvas.SetActive(false);
+
+        // Play take talisman audio
+        if (miniGameAudioSource && takeTalismanSound)
+        {
+            miniGameAudioSource.PlayOneShot(takeTalismanSound);
+        }
+
+        // Reset Cursor
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+
+        // Revert Game State back to Playing
+        if (GameManager.Instance)
+        {
+            GameManager.Instance.SetState(GameState.Playing);
+        }
     }
 
     private void UpdateTargetMovement()
@@ -135,9 +193,9 @@ public class TalismanMiniGame : MonoBehaviour
         // Get mouse position relative to Canvas
         Vector2 localMousePos;
         RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            talismanPaper, 
-            Input.mousePosition, 
-            null, 
+            talismanPaper,
+            Input.mousePosition,
+            null,
             out localMousePos
         );
 
@@ -153,12 +211,23 @@ public class TalismanMiniGame : MonoBehaviour
         if (isTracking)
         {
             currentSuccessTimer += Time.deltaTime;
-            // Recover failure grace period slightly if you are tracking again
             currentToleranceTimer = Mathf.Max(0f, currentToleranceTimer - Time.deltaTime);
+
+            // Play drawing SFX loop while within bounds
+            if (dynamicLoopAudioSource != null && drawTalismanLoopSound != null)
+            {
+                if (!dynamicLoopAudioSource.isPlaying)
+                {
+                    dynamicLoopAudioSource.Play();
+                }
+            }
         }
         else
         {
             currentToleranceTimer += Time.deltaTime;
+
+            // Pause/Stop drawing SFX loop if off-target
+            StopDrawingSound();
         }
 
         // Update progress bar UI
@@ -207,9 +276,11 @@ public class TalismanMiniGame : MonoBehaviour
     private void CompleteExorcism()
     {
         isRunning = false;
+        StopDrawingSound();
+        ClearAllTrails();
         if (gameOverlayCanvas) gameOverlayCanvas.SetActive(false);
         if (targetObject) targetObject.SealObject();
-        
+
         if (miniGameAudioSource && successSound) miniGameAudioSource.PlayOneShot(successSound);
 
         if (GameManager.Instance) GameManager.Instance.OnSealSuccess();
@@ -218,12 +289,22 @@ public class TalismanMiniGame : MonoBehaviour
     private void FailExorcism()
     {
         isRunning = false;
+        StopDrawingSound();
+        ClearAllTrails();
         if (gameOverlayCanvas) gameOverlayCanvas.SetActive(false);
-        
+
         if (miniGameAudioSource && failureSound) miniGameAudioSource.PlayOneShot(failureSound);
 
         float penalty = targetObject != null ? targetObject.SanityFailurePenalty : 15f;
         if (GameManager.Instance) GameManager.Instance.OnSealFailure(penalty);
+    }
+
+    private void StopDrawingSound()
+    {
+        if (dynamicLoopAudioSource != null && dynamicLoopAudioSource.isPlaying)
+        {
+            dynamicLoopAudioSource.Stop();
+        }
     }
 
     private IEnumerator SpawnTrailRoutine()
@@ -244,43 +325,59 @@ public class TalismanMiniGame : MonoBehaviour
     private void SpawnTrailItem()
     {
         if (targetPointVisual == null || movingTargetPoint == null) return;
-        
-        // Create trail item GameObject with RectTransform and Image
+
         GameObject trailObj = new GameObject("TrailItem", typeof(RectTransform), typeof(Image));
         trailObj.transform.SetParent(movingTargetPoint.parent, false);
-        trailObj.transform.SetSiblingIndex(movingTargetPoint.GetSiblingIndex()); // Put behind the moving target point
-        
+        trailObj.transform.SetSiblingIndex(movingTargetPoint.GetSiblingIndex());
+
         RectTransform rt = trailObj.GetComponent<RectTransform>();
         rt.anchoredPosition = movingTargetPoint.anchoredPosition;
         rt.sizeDelta = movingTargetPoint.sizeDelta;
         rt.localScale = movingTargetPoint.localScale;
         rt.rotation = movingTargetPoint.rotation;
-        
+
         Image img = trailObj.GetComponent<Image>();
         img.sprite = targetPointVisual.sprite;
         img.color = targetPointVisual.color;
         img.raycastTarget = false;
-        
-        StartCoroutine(AnimateTrailItem(img, rt));
+
+        activeTrailItems.Add(trailObj);
+        StartCoroutine(AnimateTrailItem(trailObj, img, rt));
     }
 
-    private IEnumerator AnimateTrailItem(Image img, RectTransform rt)
+    private IEnumerator AnimateTrailItem(GameObject trailObj, Image img, RectTransform rt)
     {
         float elapsed = 0f;
         Color startColor = img.color;
         Vector3 startScale = rt.localScale;
-        
+
         while (elapsed < trailLifetime)
         {
             elapsed += Time.deltaTime;
             float t = elapsed / trailLifetime;
-            
+
             if (img) img.color = new Color(startColor.r, startColor.g, startColor.b, Mathf.Lerp(startColor.a * 0.6f, 0f, t));
             if (rt) rt.localScale = Vector3.Lerp(startScale, startScale * 0.2f, t);
-            
+
             yield return null;
         }
-        
-        if (img != null) Destroy(img.gameObject);
+
+        if (trailObj != null)
+        {
+            activeTrailItems.Remove(trailObj);
+            Destroy(trailObj);
+        }
+    }
+
+    private void ClearAllTrails()
+    {
+        for (int i = activeTrailItems.Count - 1; i >= 0; i--)
+        {
+            if (activeTrailItems[i] != null)
+            {
+                Destroy(activeTrailItems[i]);
+            }
+        }
+        activeTrailItems.Clear();
     }
 }

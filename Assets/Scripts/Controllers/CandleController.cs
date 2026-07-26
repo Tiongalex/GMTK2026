@@ -61,18 +61,29 @@ public class CandleController : MonoBehaviour
     }
 
     /// <summary>
-    /// Reduces candle power by a specified amount (used by test timer and future enemy attacks).
+    /// Alias method for GameManager's OnSealFailure penalty.
+    /// </summary>
+    public void ReduceCandlePower(float amount)
+    {
+        DrainPower(amount);
+    }
+
+    /// <summary>
+    /// Reduces candle power by a specified amount (used by test timer, seal failures, or enemy attacks).
     /// </summary>
     public void DrainPower(float amount)
     {
         currentCandlePower -= amount;
         currentCandlePower = Mathf.Max(currentCandlePower, 0f); // Clamp so it doesn't go negative
 
-        Debug.Log($"Candle Power: {currentCandlePower}/{maxCandlePower} | Light Intensity: {candleLight.intensity:F2}");
+        if (candleLight != null)
+        {
+            Debug.Log($"[CandleController] Power: {currentCandlePower}/{maxCandlePower} | Light Intensity: {candleLight.intensity:F2}");
+        }
     }
 
     /// <summary>
-    /// Call this later if you want items/matches to restore candle power.
+    /// Restores candle power (e.g., finding matches/refills).
     /// </summary>
     public void RestorePower(float amount)
     {

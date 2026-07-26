@@ -16,7 +16,6 @@ public class FirstPersonMovement : MonoBehaviour
     public List<System.Func<float>> speedOverrides = new List<System.Func<float>>();
 
 
-
     void Awake()
     {
         // Get the rigidbody on this.
@@ -25,6 +24,19 @@ public class FirstPersonMovement : MonoBehaviour
 
     void FixedUpdate()
     {
+        // 1. Freeze movement during minigames, paused, or unlocked cursor states
+        if ((GameManager.Instance != null && GameManager.Instance.CurrentState != GameState.Playing) || Cursor.lockState != CursorLockMode.Locked)
+        {
+            IsRunning = false;
+            // Stop horizontal momentum immediately, retain vertical gravity/falling speed
+            if (rigidbody != null)
+            {
+                rigidbody.linearVelocity = new Vector3(0f, rigidbody.linearVelocity.y, 0f);
+                rigidbody.angularVelocity = Vector3.zero; // Prevent physics rotation spinning
+            }
+            return;
+        }
+
         // Update IsRunning from input.
         IsRunning = canRun && Input.GetKey(runningKey);
 
@@ -36,7 +48,7 @@ public class FirstPersonMovement : MonoBehaviour
         }
 
         // Get targetVelocity from input.
-        Vector2 targetVelocity =new Vector2( Input.GetAxis("Horizontal") * targetMovingSpeed, Input.GetAxis("Vertical") * targetMovingSpeed);
+        Vector2 targetVelocity = new Vector2(Input.GetAxis("Horizontal") * targetMovingSpeed, Input.GetAxis("Vertical") * targetMovingSpeed);
 
         // Apply movement.
         rigidbody.linearVelocity = transform.rotation * new Vector3(targetVelocity.x, rigidbody.linearVelocity.y, targetVelocity.y);
