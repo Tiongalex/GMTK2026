@@ -1,6 +1,8 @@
-# 🕯️ Clockwork Exorcism
+<h1 align="center">🕯️ Clockwork Exorcism</h1>
 
-> **A high-stakes first-person psychological horror & exorcism survival game developed for GMTK Game Jam 2026.**
+<p align="center">
+  <strong>A high-stakes first-person psychological horror & exorcism survival game developed for GMTK Game Jam 2026.</strong>
+</p>
 
 <p align="center">
   <img src="Screenshots/banner.png" alt="Clockwork Exorcism Banner" width="100%" />
