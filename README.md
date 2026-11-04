@@ -26,7 +26,7 @@ Your only salvation is a solitary **wax candle** and sacred **Taoist sealing tal
 
 ---
 
-## 📸 In-Game Screenshots
+## 📸 In-Game Scene
 
 <div align="center">
 
